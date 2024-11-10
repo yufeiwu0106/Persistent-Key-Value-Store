@@ -1,0 +1,111 @@
+# To compile the project
+~/kvstore $ mvn clean install
+
+# To execute the project
+~/kvstore $ java -cp ./target/Server-1.0.jar kv_store.Server
+Starting server: localhost:8080
+
+# To send client request
+~/java/kv_store $ java -cp ./target/Server-1.0.jar kv_store.Client
+
+# To benchmark
+~/java/kv_store $ java -cp ./target/Server-1.0.jar kv_store.ClientBenchmark
+
+Files:
+* `kvstore/src/main/java/kv_store/Server.java`: This is where the server will start. It initializes socket server, key value server and handler.
+* `kvstore/src/main/java/kv_store/KVSocketServer.java`: This is the class that runs server socket and accepts client socket. For every socket built, it initializes one handler which is essentially a thread that takes the request.
+* `kvstore/src/main/java/kv_store/Handler.java`: This class implements Runnable so it could be started as a thread. It's the class that takes socket and process client request and responde
+* `kvstore/src/main/java/kv_store/IOUtil.java`: helper method to read bytes from input stream to buffer.
+* `kvstore/src/main/java/kv_store/Client.java`: Client class to send request
+* `kvstore/src/main/java/kv_store/KVMessage.java`: This class is used to communication between client and server. It contains request type, key, value
+* `kvstore/src/main/java/kv_store/KVStore.java`: This class contains the hashmap that stores kv data in memory
+
+## git commands
+
+$ git log # show all commits
+$ git checkout <commit-id>
+$ git checkout main
+
+## Requirements
+Your KeyValue Server will support 3 interfaces:
+* Value GET (Key k): Retrieves the key-value pair corresponding to the provided key.
+* PUT(Key k, Value v): Inserts the key-value pair into the store.
+* DEL(Key k): Removes the key-value pair corresponding to the provided key from the store.
+
+* Each key can be of size no greater than 256B and each value can be of size no greater than 128KB. If the size is breached, return an error. A null value for the 'key' or 'value' is not allowed either.
+
+* When inserting a Key-Value pair, if the key already exists, then the value is overwritten. If the value is overwritten, then the "Status" field should have "True", else "False".
+
+* When retrieving an value, if the key does not exist, return an error message.
+
+* You should make sure that the Server works in parallel, for instance, if the server is blocked on KVStore for a PUT operation, that should not stop other requests from being executed. However, if multiple operations are being performed on the same entry (i.e. unique Key), the operations should be serialized. i.e., if a PUT (k, v) is followed by a GET (K), the GET should wait for the PUT to finish before returning.
+
+* For all networking parts of this Phase, you should use only the java.net.Socket and java.net.ServerSocket classes. You should not use any wrappers around the Socket class. If in doubt, post on Piazza if it is acceptable.
+
+* For this project, you cannot use any thread safe data structures that has been defined by the JVM. For example, you will have to use Conditional Variables and Locks with a java.util.LinkedList rather than depend upon Java's synchronized implementations (such as java.util.concurrent.BlockingQueue). We want you to learn how to build thread safe data structures by using the basic synchronization building blocks (Locks, ReadWriteLocks, Conditional Variables, etc) that you learnt in Projects 1 and 2. This means that you can use the synchronized keyword, locks (including readwrite locks), java object 's internal locking and condition mechanisms, non thread safe data structures like HashMap and LinkedList.
+
+* You should ensure the following synchronization properties in your Key-Value service:
+reads (GETs) and updates (PUTs and DELETEs) are atomic.
+
+* An update consists of modifying a (key, value) entry in both the KVCache and KVStore.
+  * an update cannot overlap with a read or another update.
+
+* In order to provide adequate parallelism, multiple reads CAN overlap (subject to property 3)
+
+* Note that a cache read operation involves two distinct steps: 1) fetching the value for the reqested key, and 2) updating the data structure (e.g. linked list) that keeps track of which key is LRU. Step 1 is just a data read, and can be done in parallel by many threads (assuming there is no concurrent write to the cache's data). Step 2 involves writing to a data structure (the LRU list), which probably requires a mutex protecting it. In other words, multiple threads possessing Read locks is not sufficient to protect the entire cache from concurrent GET operations; you will also need additional synchronization inside the KVCache get method to establish a critical section for the LRU-list update code.
+
+* You should bullet proof your code, such that the Key-Value server does not crash under any circumstances. For this Project you can ignore SecurityExceptions and InterruptedExceptions.
+
+* For your final submission, you will submit your code and host your applications (part 1 and part 5) on an EC2 instance. You will submit the access details for the instance along with your code.
+
+* You will run the Key-Value service on port 8080.
+
+## Additional Requirements
+* Socket Timeout:
+```
+socket = new Socket(hostaddr, port);
+socket.setSoTimeout(2000);
+```
+
+* System Design Requirements
+  * Hardware spec: Memory size: 32GB, disk size: 100TB
+    * Assuming only store keys in memory: 20GB/100B = 200M entries
+    * Assuming store both keys and values in memory = 20GB / 1100B = 18M entries
+  * sync put/get, key ~100 bytes, value ~1000 bytes
+  * What is QPS
+  * What is query pattern: Write heavy/Read heavy/General purpose
+  * Request message body: request type (1 byte) + key size (1 byte) + key (key.length bytes) + value size (2 bytes) + value (value.length bytes) + 1 byte for checksum (optional)
+    * 16 bit number: -32768 to 32767; 8 bit number: -128 to 127
+    * in total: 1 + 1 + 100 + 2 + 1000 bytes + 1 byte for checksum = 1105 bytes per request
+    * 1 M QPS
+    * Network throughput: 1M * 1KB = 1GB
+
+* Socket programming design
+
+
+* thread pool
+v0.1: single thread
+v0.2: create a new thread when there is a new client connection with socket
+v0.3: maintains a thread pool
+
+* Hash Scheme
+  * Collision in hashing
+    * Open Hashing: store the keys that map to a given index in linked list and store the head in table cell (Insert O(1), lookup O(k) k <= N>)
+    * Cuckoo Hashing: two hashing functions and two tables: Insert O(1);  Look up O(1)
+
+* RandomAccessFile:
+used along with memtable
+
+* Multithread Principals
+  * Per thread state: a thread's stack and registers, thread control block; copy on thread context switch; Easy to reason about when comparing to single-threaded solution
+  * When writing a thread safe class, it should consists of synchronization variables (locks) and state variables (others)
+    * Use synchronoization objects to coordinate different thread's access to shared state
+  * Lock on hashtable (page 267)
+    * Fine grained locks
+      * plus Reader/write locks 
+      * acquire each lock
+      * divide buckets to region and lock each
+
+* RocksDB
+  * SSTable(on disks)
+    * Stores index (a tuple of (key, offset, valueSize))
